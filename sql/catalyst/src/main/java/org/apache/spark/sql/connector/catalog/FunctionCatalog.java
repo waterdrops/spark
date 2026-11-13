@@ -17,14 +17,23 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction;
 
 /**
  * Catalog methods for working with Functions.
+ *
+ * @since 3.2.0
  */
+@Evolving
 public interface FunctionCatalog extends CatalogPlugin {
+
+  /**
+   * A reserved property to specify the collation of the function.
+   */
+  String PROP_COLLATION = "collation";
 
   /**
    * List the functions in a namespace from the catalog.
@@ -46,4 +55,17 @@ public interface FunctionCatalog extends CatalogPlugin {
    */
   UnboundFunction loadFunction(Identifier ident) throws NoSuchFunctionException;
 
+  /**
+   * Returns true if the function exists, false otherwise.
+   *
+   * @since 3.3.0
+   */
+  default boolean functionExists(Identifier ident) {
+    try {
+      loadFunction(ident);
+      return true;
+    } catch (NoSuchFunctionException e) {
+      return false;
+    }
+  }
 }

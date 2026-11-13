@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.connector.catalog.functions;
 
+import org.apache.spark.SparkUnsupportedOperationException;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.util.QuotingUtils;
 import org.apache.spark.sql.types.DataType;
+
+import java.util.Map;
 
 /**
  * Interface for a function that produces a result value for each input row.
@@ -133,7 +138,10 @@ import org.apache.spark.sql.types.DataType;
  *
  * @param <R> the JVM type of result values, MUST be consistent with the {@link DataType}
  *          returned via {@link #resultType()}, according to the mapping above.
+ *
+ * @since 3.2.0
  */
+@Evolving
 public interface ScalarFunction<R> extends BoundFunction {
   String MAGIC_METHOD_NAME = "invoke";
 
@@ -144,8 +152,10 @@ public interface ScalarFunction<R> extends BoundFunction {
    * @return a result value
    */
   default R produceResult(InternalRow input) {
-    throw new UnsupportedOperationException(
-        "Cannot find a compatible ScalarFunction#produceResult");
+    throw new SparkUnsupportedOperationException(
+      "SCALAR_FUNCTION_NOT_COMPATIBLE",
+      Map.of("scalarFunc", QuotingUtils.quoteIdentifier(name()))
+    );
   }
 
 }

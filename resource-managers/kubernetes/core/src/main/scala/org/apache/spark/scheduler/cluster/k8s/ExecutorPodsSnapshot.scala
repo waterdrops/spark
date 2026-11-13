@@ -18,13 +18,14 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Locale
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.ContainerStateTerminated
 import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{POD_NAME, POD_NAMESPACE, POD_PHASE}
 
 /**
  * An immutable view of the current executor pods that are running in the cluster.
@@ -60,8 +61,15 @@ object ExecutorPodsSnapshot extends Logging {
   }
 
   private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {
-    executorPods.map { pod =>
-      (pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL).toLong, toState(pod))
+    executorPods.flatMap { pod =>
+      pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) match {
+        case "EXECID" | null =>
+          // The exec label has not yet been assigned
+          None
+        case id =>
+          // We have a "real" id label
+          Some((id.toLong, toState(pod)))
+      }
     }.toMap
   }
 
@@ -107,8 +115,9 @@ object ExecutorPodsSnapshot extends Logging {
         case "terminating" =>
           PodTerminating(pod)
         case _ =>
-          logWarning(s"Received unknown phase $phase for executor pod with name" +
-            s" ${pod.getMetadata.getName} in namespace ${pod.getMetadata.getNamespace}")
+          logWarning(log"Received unknown phase ${MDC(POD_PHASE, phase)} for executor " +
+            log"pod with name ${MDC(POD_NAME, pod.getMetadata.getName)} in " +
+            log"namespace ${MDC(POD_NAMESPACE, pod.getMetadata.getNamespace)}")
           PodUnknown(pod)
       }
     }

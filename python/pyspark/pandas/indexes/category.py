@@ -14,16 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from functools import partial
 from typing import Any, Callable, List, Optional, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_hashable, CategoricalDtype
+from pandas.api.types import CategoricalDtype, is_hashable
 
 from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.internal import InternalField
-from pyspark.pandas.missing.indexes import MissingPandasLikeCategoricalIndex
 from pyspark.pandas.series import Series
 from pyspark.sql.types import StructField
 
@@ -143,7 +141,7 @@ class CategoricalIndex(Index):
                          categories=['a', 'b', 'c'], ordered=False, dtype='category')
 
         >>> idx.codes
-        Int64Index([0, 1, 1, 2, 2, 2], dtype='int64')
+        Index([0, 1, 1, 2, 2, 2], dtype='int8')
         """
         return self._with_new_scol(
             self.spark.column,
@@ -205,7 +203,7 @@ class CategoricalIndex(Index):
         return self.dtype.ordered
 
     def add_categories(
-        self, new_categories: Union[pd.Index, Any, List], inplace: bool = False
+        self, new_categories: Union[pd.Index, Any, List]
     ) -> Optional["CategoricalIndex"]:
         """
         Add new categories.
@@ -217,16 +215,11 @@ class CategoricalIndex(Index):
         ----------
         new_categories : category or list-like of category
            The new categories to be included.
-        inplace : bool, default False
-           Whether or not to add the categories inplace or return a copy of
-           this categorical with added categories.
-
-           .. deprecated:: 3.2.0
 
         Returns
         -------
-        CategoricalIndex or None
-            Categorical with new categories added or None if ``inplace=True``.
+        CategoricalIndex
+            Categorical with new categories added
 
         Raises
         ------
@@ -253,27 +246,18 @@ class CategoricalIndex(Index):
         CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
                          categories=['a', 'b', 'c', 'x'], ordered=False, dtype='category')
         """
-        if inplace:
-            raise ValueError("cannot use inplace with CategoricalIndex")
-
         return CategoricalIndex(
             self.to_series().cat.add_categories(new_categories=new_categories)
         ).rename(self.name)
 
-    def as_ordered(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
+    def as_ordered(self) -> Optional["CategoricalIndex"]:
         """
         Set the Categorical to be ordered.
 
-        Parameters
-        ----------
-        inplace : bool, default False
-           Whether or not to set the ordered attribute in-place or return
-           a copy of this categorical with ordered set to True.
-
         Returns
         -------
-        CategoricalIndex or None
-            Ordered Categorical or None if ``inplace=True``.
+        CategoricalIndex
+            Ordered Categorical
 
         Examples
         --------
@@ -286,25 +270,16 @@ class CategoricalIndex(Index):
         CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
                          categories=['a', 'b', 'c'], ordered=True, dtype='category')
         """
-        if inplace:
-            raise ValueError("cannot use inplace with CategoricalIndex")
-
         return CategoricalIndex(self.to_series().cat.as_ordered()).rename(self.name)
 
-    def as_unordered(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
+    def as_unordered(self) -> Optional["CategoricalIndex"]:
         """
         Set the Categorical to be unordered.
 
-        Parameters
-        ----------
-        inplace : bool, default False
-           Whether or not to set the ordered attribute in-place or return
-           a copy of this categorical with ordered set to False.
-
         Returns
         -------
-        CategoricalIndex or None
-            Unordered Categorical or None if ``inplace=True``.
+        CategoricalIndex
+            Unordered Categorical
 
         Examples
         --------
@@ -317,13 +292,10 @@ class CategoricalIndex(Index):
         CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
                          categories=['a', 'b', 'c'], ordered=False, dtype='category')
         """
-        if inplace:
-            raise ValueError("cannot use inplace with CategoricalIndex")
-
         return CategoricalIndex(self.to_series().cat.as_unordered()).rename(self.name)
 
     def remove_categories(
-        self, removals: Union[pd.Index, Any, List], inplace: bool = False
+        self, removals: Union[pd.Index, Any, List]
     ) -> Optional["CategoricalIndex"]:
         """
         Remove the specified categories.
@@ -335,16 +307,11 @@ class CategoricalIndex(Index):
         ----------
         removals : category or list of categories
            The categories which should be removed.
-        inplace : bool, default False
-           Whether or not to remove the categories inplace or return a copy of
-           this categorical with removed categories.
-
-           .. deprecated:: 3.2.0
 
         Returns
         -------
-        CategoricalIndex or None
-            Categorical with removed categories or None if ``inplace=True``.
+        CategoricalIndex
+            Categorical with removed categories
 
         Raises
         ------
@@ -370,27 +337,16 @@ class CategoricalIndex(Index):
         CategoricalIndex(['a', nan, nan, 'c', 'c', 'c'],
                          categories=['a', 'c'], ordered=False, dtype='category')
         """
-        if inplace:
-            raise ValueError("cannot use inplace with CategoricalIndex")
-
         return CategoricalIndex(self.to_series().cat.remove_categories(removals)).rename(self.name)
 
-    def remove_unused_categories(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
+    def remove_unused_categories(self) -> Optional["CategoricalIndex"]:
         """
         Remove categories which are not used.
 
-        Parameters
-        ----------
-        inplace : bool, default False
-           Whether or not to drop unused categories inplace or return a copy of
-           this categorical with unused categories dropped.
-
-           .. deprecated:: 3.2.0
-
         Returns
         -------
-        cat : CategoricalIndex or None
-            Categorical with unused categories dropped or None if ``inplace=True``.
+        cat : CategoricalIndex
+            Categorical with unused categories dropped
 
         See Also
         --------
@@ -411,13 +367,10 @@ class CategoricalIndex(Index):
         CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
                          categories=['a', 'b', 'c'], ordered=False, dtype='category')
         """
-        if inplace:
-            raise ValueError("cannot use inplace with CategoricalIndex")
-
         return CategoricalIndex(self.to_series().cat.remove_unused_categories()).rename(self.name)
 
     def rename_categories(
-        self, new_categories: Union[list, dict, Callable], inplace: bool = False
+        self, new_categories: Union[list, dict, Callable]
     ) -> Optional["CategoricalIndex"]:
         """
         Rename categories.
@@ -439,16 +392,10 @@ class CategoricalIndex(Index):
             * callable : a callable that is called on all items in the old
               categories and whose return values comprise the new categories.
 
-        inplace : bool, default False
-            Whether or not to rename the categories inplace or return a copy of
-            this categorical with renamed categories.
-
-            .. deprecated:: 3.2.0
-
         Returns
         -------
-        cat : CategoricalIndex or None
-            Categorical with removed categories or None if ``inplace=True``.
+        cat : CategoricalIndex
+            Categorical with removed categories or None
 
         Raises
         ------
@@ -481,9 +428,6 @@ class CategoricalIndex(Index):
         >>> idx.rename_categories(lambda x: x.upper())
         CategoricalIndex(['A', 'A', 'B'], categories=['A', 'B'], ordered=False, dtype='category')
         """
-        if inplace:
-            raise ValueError("cannot use inplace with CategoricalIndex")
-
         return CategoricalIndex(self.to_series().cat.rename_categories(new_categories)).rename(
             self.name
         )
@@ -492,12 +436,11 @@ class CategoricalIndex(Index):
         self,
         new_categories: Union[pd.Index, Any, List],
         ordered: Optional[bool] = None,
-        inplace: bool = False,
     ) -> Optional["CategoricalIndex"]:
         """
         Reorder categories as specified in new_categories.
 
-        `new_categories` need to include all old categories and no new category
+        `new_categories` needs to include all old categories and no new category
         items.
 
         Parameters
@@ -505,18 +448,13 @@ class CategoricalIndex(Index):
         new_categories : Index-like
            The categories in new order.
         ordered : bool, optional
-           Whether or not the categorical is treated as a ordered categorical.
+           Whether or not the categorical is treated as an ordered categorical.
            If not given, do not change the ordered information.
-        inplace : bool, default False
-           Whether or not to reorder the categories inplace or return a copy of
-           this categorical with reordered categories.
-
-           .. deprecated:: 3.2.0
 
         Returns
         -------
-        cat : CategoricalIndex or None
-            Categorical with removed categories or None if ``inplace=True``.
+        cat : CategoricalIndex
+            Categorical with removed categories
 
         Raises
         ------
@@ -543,9 +481,6 @@ class CategoricalIndex(Index):
         CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
                          categories=['c', 'b', 'a'], ordered=False, dtype='category')
         """
-        if inplace:
-            raise ValueError("cannot use inplace with CategoricalIndex")
-
         return CategoricalIndex(
             self.to_series().cat.reorder_categories(new_categories=new_categories, ordered=ordered)
         ).rename(self.name)
@@ -555,14 +490,13 @@ class CategoricalIndex(Index):
         new_categories: Union[pd.Index, List],
         ordered: Optional[bool] = None,
         rename: bool = False,
-        inplace: bool = False,
     ) -> Optional["CategoricalIndex"]:
         """
         Set the categories to the specified new_categories.
 
         `new_categories` can include new categories (which will result in
         unused categories) or remove old categories (which results in values
-        set to NaN). If `rename==True`, the categories will simple be renamed
+        set to NaN). If `rename==True`, the categories will simply be renamed
         (less or more items than in old categories will result in values set to
         NaN or in unused categories respectively).
 
@@ -573,7 +507,7 @@ class CategoricalIndex(Index):
         On the other hand this methods does not do checks (e.g., whether the
         old categories are included in the new categories on a reorder), which
         can result in surprising changes, for example when using special string
-        dtypes, which does not considers a S1 string equal to a single char
+        dtypes, which does not consider a S1 string equal to a single char
         python string.
 
         Parameters
@@ -581,20 +515,15 @@ class CategoricalIndex(Index):
         new_categories : Index-like
            The categories in new order.
         ordered : bool, default False
-           Whether or not the categorical is treated as a ordered categorical.
+           Whether or not the categorical is treated as an ordered categorical.
            If not given, do not change the ordered information.
         rename : bool, default False
            Whether or not the new_categories should be considered as a rename
            of the old categories or as reordered categories.
-        inplace : bool, default False
-           Whether or not to reorder the categories in-place or return a copy
-           of this categorical with reordered categories.
-
-           .. deprecated:: 3.2.0
 
         Returns
         -------
-        CategoricalIndex with reordered categories or None if inplace.
+        CategoricalIndex with reordered categories
 
         Raises
         ------
@@ -626,29 +555,96 @@ class CategoricalIndex(Index):
         >>> idx.set_categories([1, 2, 3], rename=True, ordered=True)
         CategoricalIndex([1, 2, 2, 3, 3, 3], categories=[1, 2, 3], ordered=True, dtype='category')
         """
-        if inplace:
-            raise ValueError("cannot use inplace with CategoricalIndex")
-
         return CategoricalIndex(
             self.to_series().cat.set_categories(new_categories, ordered=ordered, rename=rename)
         ).rename(self.name)
 
-    def __getattr__(self, item: str) -> Any:
-        if hasattr(MissingPandasLikeCategoricalIndex, item):
-            property_or_func = getattr(MissingPandasLikeCategoricalIndex, item)
-            if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
-            else:
-                return partial(property_or_func, self)
-        raise AttributeError("'CategoricalIndex' object has no attribute '{}'".format(item))
+    def map(  # type: ignore[override]
+        self, mapper: Union[dict, Callable[[Any], Any], pd.Series]
+    ) -> "Index":
+        """
+        Map values using input correspondence (a dict, Series, or function).
+
+        Maps the values (their categories, not the codes) of the index to new
+        categories. If the mapping correspondence is one-to-one the result is a
+        `CategoricalIndex` which has the same order property as the original,
+        otherwise an `Index` is returned.
+
+        If a `dict` or `Series` is used any unmapped category is mapped to missing values.
+        Note that if this happens an `Index` will be returned.
+
+        Parameters
+        ----------
+        mapper : function, dict, or Series
+            Mapping correspondence.
+
+        Returns
+        -------
+        CategoricalIndex or Index
+            Mapped index.
+
+        See Also
+        --------
+        Index.map : Apply a mapping correspondence on an `Index`.
+        Series.map : Apply a mapping correspondence on a `Series`
+        Series.apply : Apply more complex functions on a `Series`
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(['a', 'b', 'c'])
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.map(lambda x: x.upper())  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['A', 'B', 'C'],
+                         categories=['A', 'B', 'C'], ordered=False, dtype='category')
+
+        >>> pser = pd.Series([1, 2, 3], index=pd.CategoricalIndex(['a', 'b', 'c'], ordered=True))
+        >>> idx.map(pser)  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex([1, 2, 3],
+                         categories=[1, 2, 3], ordered=False, dtype='category')
+
+        >>> idx.map({'a': 'first', 'b': 'second', 'c': 'third'})  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['first', 'second', 'third'],
+                         categories=['first', 'second', 'third'], ordered=False, dtype='category')
+
+        If the mapping is one-to-one the ordering of the categories is preserved:
+
+        >>> idx = ps.CategoricalIndex(['a', 'b', 'c'], ordered=True)
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'c'],
+                         categories=['a', 'b', 'c'], ordered=True, dtype='category')
+
+        >>> idx.map({'a': 3, 'b': 2, 'c': 1})  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex([3, 2, 1],
+                         categories=[3, 2, 1], ordered=True, dtype='category')
+
+        If the mapping is not one-to-one an `Index` is returned:
+
+        >>> idx.map({'a': 'first', 'b': 'second', 'c': 'first'})
+        Index(['first', 'second', 'first'], dtype='object')
+
+        If a `dict` is used, all unmapped categories are mapped to None and
+        the result is an `Index`:
+
+        >>> idx.map({'a': 'first', 'b': 'second'})
+        Index(['first', 'second', None], dtype='object')
+        """
+        return super().map(mapper)
+
+    @no_type_check
+    def all(self, *args, **kwargs) -> None:
+        raise TypeError("Cannot perform 'all' with this index type: %s" % type(self).__name__)
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
     import sys
-    from pyspark.sql import SparkSession
+
     import pyspark.pandas.indexes.category
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 
@@ -659,7 +655,7 @@ def _test() -> None:
         .appName("pyspark.pandas.indexes.category tests")
         .getOrCreate()
     )
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.pandas.indexes.category,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE,

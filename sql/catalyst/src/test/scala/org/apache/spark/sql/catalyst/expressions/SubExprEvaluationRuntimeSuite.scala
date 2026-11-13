@@ -17,53 +17,54 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.LongType
 
 class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
 
   test("Evaluate ExpressionProxy should create cached result") {
     val runtime = new SubExprEvaluationRuntime(1)
     val proxy = ExpressionProxy(Literal(1), 0, runtime)
-    assert(runtime.cache.estimatedSize() == 0)
+    assert(runtime.cache.size() == 0)
     proxy.eval()
-    assert(runtime.cache.estimatedSize() == 1)
+    assert(runtime.cache.size() == 1)
     assert(runtime.cache.get(proxy) == ResultProxy(1))
   }
 
   test("SubExprEvaluationRuntime cannot exceed configured max entries") {
     val runtime = new SubExprEvaluationRuntime(2)
-    assert(runtime.cache.estimatedSize() == 0)
+    assert(runtime.cache.size() == 0)
 
     val proxy1 = ExpressionProxy(Literal(1), 0, runtime)
     proxy1.eval()
-    assert(runtime.cache.estimatedSize() == 1)
+    assert(runtime.cache.size() == 1)
     assert(runtime.cache.get(proxy1) == ResultProxy(1))
 
     val proxy2 = ExpressionProxy(Literal(2), 1, runtime)
     proxy2.eval()
-    assert(runtime.cache.estimatedSize() == 2)
+    assert(runtime.cache.size() == 2)
     assert(runtime.cache.get(proxy2) == ResultProxy(2))
 
     val proxy3 = ExpressionProxy(Literal(3), 2, runtime)
     proxy3.eval()
-    assert(runtime.cache.estimatedSize() == 2)
+    assert(runtime.cache.size() == 2)
     assert(runtime.cache.get(proxy3) == ResultProxy(3))
   }
 
   test("setInput should empty cached result") {
     val runtime = new SubExprEvaluationRuntime(2)
     val proxy1 = ExpressionProxy(Literal(1), 0, runtime)
-    assert(runtime.cache.estimatedSize() == 0)
+    assert(runtime.cache.size() == 0)
     proxy1.eval()
-    assert(runtime.cache.estimatedSize() == 1)
+    assert(runtime.cache.size() == 1)
     assert(runtime.cache.get(proxy1) == ResultProxy(1))
 
     val proxy2 = ExpressionProxy(Literal(2), 1, runtime)
     proxy2.eval()
-    assert(runtime.cache.estimatedSize() == 2)
+    assert(runtime.cache.size() == 2)
     assert(runtime.cache.get(proxy2) == ResultProxy(2))
 
     runtime.setInput()
-    assert(runtime.cache.estimatedSize() == 0)
+    assert(runtime.cache.size() == 0)
   }
 
   test("Wrap ExpressionProxy on subexpressions") {
@@ -116,5 +117,16 @@ class SubExprEvaluationRuntimeSuite extends SparkFunSuite {
     // ( (one * two) * (one * two) )
     assert(proxys.size == 2)
     assert(proxys.forall(_.child.semanticEquals(mul2_1)))
+  }
+
+  test("SPARK-41991: CheckOverflowInTableInsert with ExpressionProxy child") {
+    val runtime = new SubExprEvaluationRuntime(1)
+    val proxy = ExpressionProxy(Cast(Literal.apply(1), LongType), 0, runtime)
+    val checkOverflow = CheckOverflowInTableInsert(Cast(Literal.apply(1), LongType), "col")
+      .withNewChildrenInternal(IndexedSeq(proxy))
+    assert(runtime.cache.size() == 0)
+    checkOverflow.eval()
+    assert(runtime.cache.size() == 1)
+    assert(runtime.cache.get(proxy) == ResultProxy(1L))
   }
 }

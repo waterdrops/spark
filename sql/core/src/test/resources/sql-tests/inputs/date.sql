@@ -1,5 +1,7 @@
 -- date literals, functions and operations
 
+create temporary view date_view as select '2011-11-11' date_str, '1' int_str;
+
 select date '2019-01-01\t';
 select date '2020-01-01中文';
 
@@ -17,6 +19,7 @@ select date'2021-4294967297-11';
 select current_date = current_date;
 -- under ANSI mode, `current_date` can't be a function name.
 select current_date() = current_date();
+select curdate(1);
 
 -- conversions between date and unix_date (number of days from epoch)
 select DATE_FROM_UNIX_DATE(0), DATE_FROM_UNIX_DATE(1000), DATE_FROM_UNIX_DATE(null);
@@ -58,9 +61,10 @@ select next_day(null, "Mon");
 select next_day(null, "xx");
 
 -- date add
+select date_add(date'2011-11-11', 1);
+select date_add('2011-11-11', 1);
 select date_add('2011-11-11', 1Y);
 select date_add('2011-11-11', 1S);
-select date_add('2011-11-11', 1);
 -- invalid cases: the second parameter can only be byte/short/int
 select date_add('2011-11-11', 1L);
 select date_add('2011-11-11', 1.0);
@@ -71,41 +75,99 @@ select date_add('2011-11-11', '1.2');
 -- null input leads to null result.
 select date_add(null, 1);
 select date_add(date'2011-11-11', null);
--- `date_add` accepts both date and timestamp ltz/ntz inputs.
-select date_add(date'2011-11-11', 1);
-select date_add(timestamp_ltz'2011-11-11 12:12:12', 1), date_add(timestamp_ntz'2011-11-11 12:12:12', 1);
+-- `date_add` accepts both date and timestamp ltz/ntz inputs (non-ANSI mode).
+select date_add(timestamp_ltz'2011-11-11 12:12:12', 1);
+select date_add(timestamp_ntz'2011-11-11 12:12:12', 1);
 
 -- date sub
 select date_sub(date'2011-11-11', 1);
+select date_sub('2011-11-11', 1);
+select date_sub('2011-11-11', 1Y);
+select date_sub('2011-11-11', 1S);
+-- invalid cases: the second parameter can only be byte/short/int
+select date_sub('2011-11-11', 1L);
+select date_sub('2011-11-11', 1.0);
+select date_sub('2011-11-11', 1E1);
 -- the second parameter can be a string literal if it can be parsed to int
 select date_sub(date'2011-11-11', '1');
 select date_sub(date'2011-11-11', '1.2');
--- `date_sub` accepts both date and timestamp ltz/ntz inputs.
-select date_sub(timestamp_ltz'2011-11-11 12:12:12', 1), date_sub(timestamp_ntz'2011-11-11 12:12:12', 1);
 -- null input leads to null result.
 select date_sub(null, 1);
 select date_sub(date'2011-11-11', null);
+-- `date_sub` accepts both date and timestamp ltz/ntz inputs (non-ANSI mode).
+select date_sub(timestamp_ltz'2011-11-11 12:12:12', 1);
+select date_sub(timestamp_ntz'2011-11-11 12:12:12', 1);
 
 -- date add/sub with non-literal string column
-create temp view v as select '1' str;
-select date_add('2011-11-11', str) from v;
-select date_sub('2011-11-11', str) from v;
+select date_add('2011-11-11', int_str) from date_view;
+select date_sub('2011-11-11', int_str) from date_view;
+select date_add(date_str, 1) from date_view;
+select date_sub(date_str, 1) from date_view;
 
--- date add/sub operations
-select date'2011-11-11' + 1E1;
-select date'2011-11-11' + '1';
-select null + date '2001-09-28';
+-- date +/- number
+select date '2011-11-11' + 1E1;
 select date '2001-09-28' + 7Y;
 select 7S + date '2001-09-28';
 select date '2001-10-01' - 7;
-select date '2001-10-01' - '7';
-select date '2001-09-28' + null;
-select date '2001-09-28' - null;
-select '2011-11-11' - interval '2' day;
-select null - date '2019-10-06';
+
+-- date - date
 select date '2001-10-01' - date '2001-09-28';
+-- if one side is string/null literal, promote it to date type.
+select date '2001-10-01' - '2001-09-28';
+select '2001-10-01' - date '2001-09-28';
+select date '2001-09-28' - null;
+select null - date '2019-10-06';
+-- invalid: non-literal string column
+select date_str - date '2001-09-28' from date_view;
+select date '2001-09-28' - date_str from date_view;
+
+-- invalid: date + string literal
+select date'2011-11-11' + '1';
+select '1' + date'2011-11-11';
+
+-- null result: date + null
+select date'2011-11-11' + null;
+select null + date'2011-11-11';
+
+-- date +/- interval and interval + date
+select date '2012-01-01' - interval '2-2' year to month,
+       date '2011-11-11' - interval '2' day,
+       date '2012-01-01' + interval '-2-2' year to month,
+       date '2011-11-11' + interval '-2' month,
+       - interval '2-2' year to month + date '2012-01-01',
+       interval '-2' day + date '2011-11-11';
 
 -- Unsupported narrow text style
 select to_date('26/October/2015', 'dd/MMMMM/yyyy');
 select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
 select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
+
+-- Add a number of units to a timestamp or a date
+select dateadd(MICROSECOND, 1001, timestamp'2022-02-25 01:02:03.123');
+select date_add(MILLISECOND, -1, timestamp'2022-02-25 01:02:03.456');
+select dateadd(SECOND, 58, timestamp'2022-02-25 01:02:03');
+select date_add(MINUTE, -100, date'2022-02-25');
+select dateadd(HOUR, -1, timestamp'2022-02-25 01:02:03');
+select date_add(DAY, 367, date'2022-02-25');
+select dateadd(WEEK, -4, timestamp'2022-02-25 01:02:03');
+select date_add(MONTH, -1, timestamp'2022-02-25 01:02:03');
+select dateadd(QUARTER, 5, date'2022-02-25');
+select date_add(YEAR, 1, date'2022-02-25');
+
+select dateadd('MICROSECOND', 1001, timestamp'2022-02-25 01:02:03.123');
+select date_add('QUARTER', 5, date'2022-02-25');
+
+-- Get the difference between timestamps or dates in the specified units
+select datediff(MICROSECOND, timestamp'2022-02-25 01:02:03.123', timestamp'2022-02-25 01:02:03.124001');
+select date_diff(MILLISECOND, timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455');
+select datediff(SECOND, timestamp'2022-02-25 01:02:03', timestamp'2022-02-25 01:03:01');
+select date_diff(MINUTE, date'2022-02-25', timestamp'2022-02-24 22:20:00');
+select datediff(HOUR, timestamp'2022-02-25 01:02:03', timestamp'2022-02-25 00:02:03');
+select date_diff(DAY, date'2022-02-25', timestamp'2023-02-27 00:00:00');
+select datediff(WEEK, timestamp'2022-02-25 01:02:03', timestamp'2022-01-28 01:02:03');
+select date_diff(MONTH, timestamp'2022-02-25 01:02:03', timestamp'2022-01-25 01:02:03');
+select datediff(QUARTER, date'2022-02-25', date'2023-05-25');
+select date_diff(YEAR, date'2022-02-25', date'2023-02-25');
+
+select date_diff('MILLISECOND', timestamp'2022-02-25 01:02:03.456', timestamp'2022-02-25 01:02:03.455');
+select datediff('YEAR', date'2022-02-25', date'2023-02-25');

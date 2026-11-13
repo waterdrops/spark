@@ -20,10 +20,11 @@ An example for Chi-square hypothesis testing.
 Run with:
   bin/spark-submit examples/src/main/python/ml/chi_square_test_example.py
 """
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.stat import ChiSquareTest
+from pyspark.sql import SparkSession
+
 # $example off$
 
 if __name__ == "__main__":
@@ -42,6 +43,11 @@ if __name__ == "__main__":
     df = spark.createDataFrame(data, ["label", "features"])
 
     r = ChiSquareTest.test(df, "features", "label").head()
+
+    # $example off$
+    assert r is not None
+    # $example on$
+
     print("pValues: " + str(r.pValues))
     print("degreesOfFreedom: " + str(r.degreesOfFreedom))
     print("statistics: " + str(r.statistics))

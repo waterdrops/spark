@@ -54,6 +54,15 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     ParamsSuite.checkParams(new RFormula())
   }
 
+  test("RFormulaModel estimated size") {
+    val dataset = Seq(("a", 1.0), ("b", 2.0), ("c", 3.0)).toDF("category", "label")
+    val model = new RFormula().setFormula("label ~ category").fit(dataset)
+    val maxSize = 1024 * 16
+    assert(
+      model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("transform numeric data") {
     val formula = new RFormula().setFormula("id ~ v1 + v2")
     val original = Seq((0, 1.0, 3.0), (2, 2.0, 5.0)).toDF("id", "v1", "v2")
@@ -627,4 +636,15 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     assert(get_output("keep").count() == 6)
   }
 
+  test("SPARK-37026: Ensure the element type of ResolvedRFormula.terms is " +
+    "scala.Seq for Scala 2.13") {
+    withTempPath { path =>
+      val dataset = Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz")).toDF("id", "a", "b")
+      val rFormula = new RFormula().setFormula("id ~ a:b")
+      val model = rFormula.fit(dataset)
+      model.save(path.getCanonicalPath)
+      val newModel = RFormulaModel.load(path.getCanonicalPath)
+      newModel.resolvedFormula.toString
+    }
+  }
 }

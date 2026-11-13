@@ -31,12 +31,15 @@ A literal (also known as a constant) represents a fixed data value. Spark SQL su
 
 ### String Literal
 
-A string literal is used to specify a character string value.
+A string literal specifies a character string value of type `STRING`.
+`'ab'` is unbounded `STRING`, not `CHAR(2)` or `VARCHAR(2)`.
+There is no `CHAR` or `VARCHAR` literal syntax; use `CAST` to get a constrained type.
+See [Character String Types](sql-ref-character-string-types.html).
 
 #### Syntax
 
 ```sql
-'char [ ... ]' | "char [ ... ]"
+[ r ] { 'char [ ... ]' | "char [ ... ]" } [ ... ]
 ```
 
 #### Parameters
@@ -46,8 +49,49 @@ A string literal is used to specify a character string value.
     One character from the character set. Use `\` to escape special characters (e.g., `'` or `\`).
     To represent unicode characters, use 16-bit or 32-bit unicode escape of the form `\uxxxx` or `\Uxxxxxxxx`,
     where xxxx and xxxxxxxx are 16-bit and 32-bit code points in hexadecimal respectively (e.g., `\u3042` for `あ` and `\U0001F44D` for `👍`).
+    An ASCII character can also be represented as an octal number preceded by `\` like `\101`, which represents `A`.
+
+* **r**
+
+    Case insensitive, indicates `RAW`. If a string literal starts with `r` prefix, neither special characters nor unicode characters are escaped by `\`.
+
+The following escape sequences are recognized in regular string literals (without the `r` prefix), and replaced according to the following rules:
+- `\0` -> `\u0000`, unicode character with the code 0;
+- `\b` -> `\u0008`, backspace;
+- `\n` -> `\u000a`, linefeed;
+- `\r` -> `\u000d`, carriage return;
+- `\t` -> `\u0009`, horizontal tab;
+- `\Z` -> `\u001A`, substitute;
+- `\%` -> `\%`;
+- `\_` -> `\_`;
+- `\<other char>` -> `<other char>`, skip the slash and leave the character as is.
+
+The unescaping rules above can be turned off by setting the SQL config `spark.sql.parser.escapedStringLiterals` to `true`.
+
+Chains of string literals are coalesced into a single string literal.
+This can be useful when constructing strings that are too long to fit on a single line.
+It also allows mixing of string literals and parameter marker into a single string literal.
 
 #### Examples
+
+```sql
+SELECT TYPEOF('ab') AS col;
++------+
+|   col|
++------+
+|string|
++------+
+
+SET spark.sql.charVarchar.standardSemantics.enabled = true;
+SELECT TYPEOF(CAST('ab' AS CHAR(2))) AS col;
++-------+
+|    col|
++-------+
+|char(2)|
++-------+
+```
+
+By default, `CAST(... AS CHAR(n))` and `CAST(... AS VARCHAR(n))` are `STRING`.
 
 ```sql
 SELECT 'Hello, World!' AS col;
@@ -61,15 +105,36 @@ SELECT "SPARK SQL" AS col;
 +---------+
 |      col|
 +---------+
-|Spark SQL|
+|SPARK SQL|
 +---------+
 
 SELECT 'it\'s $10.' AS col;
 +---------+
 |      col|
 +---------+
-|It's $10.|
+|it's $10.|
 +---------+
+
+SELECT r"'\n' represents newline character." AS col;
++----------------------------------+
+|                               col|
++----------------------------------+
+|'\n' represents newline character.|
++----------------------------------+
+
+SELECT 'Hello' ',' 'World!' AS col;
++-------------+
+|          col|
++-------------+
+|Hello, World!|
++-------------+
+
+EXECUTE IMMEDIATE 'SELECT "Hello, " :p "!" AS col' USING 'World' AS p;
++-------------+
+|          col|
++-------------+
+|Hello, World!|
++-------------+
 ```
 
 ### Binary Literal
@@ -144,16 +209,15 @@ SELECT TRUE AS col;
 ### Numeric Literal
 
 A numeric literal is used to specify a fixed or floating-point number.
+There are two kinds of numeric literals: integral literal and fractional literal.
 
-#### Integral Literal
-
-##### Syntax
+#### Integral Literal Syntax
 
 ```sql
 [ + | - ] digit [ ... ] [ L | S | Y ]
 ```
 
-##### Parameters
+#### Integral Literal Parameters
 
 * **digit**
 
@@ -175,7 +239,7 @@ A numeric literal is used to specify a fixed or floating-point number.
 
     Indicates a 4-byte signed integer number.
 
-##### Examples
+#### Integral Literal Examples
 
 ```sql
 SELECT -2147483648 AS col;
@@ -207,9 +271,7 @@ SELECT 482S AS col;
 +---+
 ```
 
-#### Fractional Literals
-
-##### Syntax
+#### Fractional Literals Syntax
 
 decimal literals:
 ```sql
@@ -236,7 +298,7 @@ and exponent is defined as
 E [ + | - ] digit [ ... ]
 ```
 
-##### Parameters
+#### Fractional Literals Parameters
 
 * **digit**
 
@@ -254,15 +316,22 @@ E [ + | - ] digit [ ... ]
 
     Case insensitive, indicates `DECIMAL`, with the total number of digits as precision and the number of digits to right of decimal point as scale.
 
-##### Examples
+#### Fractional Literals Examples
 
 ```sql
-SELECT 12.578 AS col;
-+------+
-|   col|
-+------+
-|12.578|
-+------+
+SELECT 12.578 AS col, TYPEOF(12.578) AS type;
++------+------------+
+|   col|        type|
++------+------------+
+|12.578|decimal(5,3)|
++------+------------+
+
+SELECT 12.578E0 AS col, TYPEOF(12.578E0) AS type;
++------+------+
+|   col|  type|
++------+------+
+|12.578|double|
++------+------+
 
 SELECT -0.1234567 AS col;
 +----------+
@@ -344,11 +413,9 @@ SELECT -3.E-3D AS col;
 
 ### Datetime Literal
 
-A Datetime literal is used to specify a datetime value.
+A datetime literal is used to specify a date, time or timestamp value.
 
-#### Date Literal
-
-##### Syntax
+#### Date Syntax
 
 ```sql
 DATE { 'yyyy' |
@@ -358,7 +425,7 @@ DATE { 'yyyy' |
 ```
 **Note:** defaults to `01` if month or day is not specified.
 
-##### Examples
+#### Date Examples
 
 ```sql
 SELECT DATE '1997' AS col;
@@ -383,9 +450,51 @@ SELECT DATE '2011-11-11' AS col;
 +----------+
 ```
 
-#### Timestamp Literal
+#### Time Syntax
 
-##### Syntax
+```sql
+TIME { '[h]h:[m]m[:]' |
+       '[h]h:[m]m:[s]s[.]' |
+       '[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][ns][ns][ns]'}
+```
+**Note:** defaults to `00` if hour, minute or second is not specified.
+
+#### Time Examples
+
+```sql
+SELECT TIME'12:00' as col;
++--------+
+|col     |
++--------+
+|12:00:00|
++--------+
+SELECT TIME'2:0' as col;
++--------+
+|col     |
++--------+
+|02:00:00|
++--------+
+SELECT TIME'2:0:3' as col;
++--------+
+|col     |
++--------+
+|02:00:03|
++--------+
+SELECT TIME'23:59:59.999999' as col;
++---------------+
+|col            |
++---------------+
+|23:59:59.999999|
++---------------+
+SELECT TIME'23:59:59.999999999' as col;
++------------------+
+|col               |
++------------------+
+|23:59:59.999999999|
++------------------+
+```
+
+#### Timestamp Syntax
 
 ```sql
 TIMESTAMP { 'yyyy' |
@@ -410,7 +519,7 @@ TIMESTAMP { 'yyyy' |
 
 **Note:** defaults to the session local timezone (set via `spark.sql.session.timeZone`) if `zone_id` is not specified.
 
-##### Examples
+#### Timestamp Examples
 
 ```sql
 SELECT TIMESTAMP '1997-01-31 09:26:56.123' AS col;
@@ -438,24 +547,86 @@ SELECT TIMESTAMP '1997-01' AS col;
 ### Interval Literal
 
 An interval literal is used to specify a fixed period of time.
+The interval literal supports two syntaxes: ANSI syntax and multi-units syntax.
+
+#### ANSI Syntax
+
+The ANSI SQL standard defines interval literals in the form:
+```sql
+INTERVAL [ <sign> ] <interval string> <interval qualifier>
+```
+where `<interval qualifier>` can be a single field or in the field-to-field form:
+```sql
+<interval qualifier> ::= <start field> TO <end field> | <single field>
+```
+The field name is case-insensitive, and can be one of `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE` and `SECOND`.
+
+An interval literal can have either year-month or day-time interval type. The interval sub-type defines format of `<interval string>`:
+```sql
+<interval string> ::= <quote> [ <sign> ] { <year-month literal> | <day-time literal> } <quote>
+<year-month literal> ::= <years value> [ <minus sign> <months value> ] | <months value>
+<day-time literal> ::= <day-time interval> | <time interval>
+<day-time interval> ::= <days value> [ <space> <hours value> [ <colon> <minutes value> [ <colon> <seconds value> ] ] ]
+<time interval> ::= <hours value> [ <colon> <minutes value> [ <colon> <seconds value> ] ]
+  | <minutes value> [ <colon> <seconds value> ]
+  | <seconds value>
+```
+
+Supported year-month interval literals and theirs formats:
+
+|`<interval qualifier>`|Interval string pattern|An instance of the literal|
+|---------|-------|------------|
+|YEAR|`[+|-]'[+|-]y'`|`INTERVAL -'2021' YEAR`|
+|YEAR TO MONTH|`[+|-]'[+|-]y-m'`|`INTERVAL '-2021-07' YEAR TO MONTH`|
+|MONTH|`[+|-]'[+|-]m'`|`interval '10' month`|
+
+Formats of supported day-time interval literals:
+
+|`<interval qualifier>`|Interval string pattern|An instance of the literal|
+|---------|----|-------------------|
+|DAY|`[+|-]'[+|-]d'`|`INTERVAL -'100' DAY`|
+|DAY TO HOUR|`[+|-]'[+|-]d h'`|`INTERVAL '-100 10' DAY TO HOUR`|
+|DAY TO MINUTE|`[+|-]'[+|-]d h:m'`|`INTERVAL '100 10:30' DAY TO MINUTE`|
+|DAY TO SECOND|`[+|-]'[+|-]d h:m:s.n'`|`INTERVAL '100 10:30:40.999999' DAY TO SECOND`|
+|HOUR|`[+|-]'[+|-]h'`|`INTERVAL '123' HOUR`|
+|HOUR TO MINUTE|`[+|-]'[+|-]h:m'`|`INTERVAL -'-123:10' HOUR TO MINUTE`|
+|HOUR TO SECOND|`[+|-]'[+|-]h:m:s.n'`|`INTERVAL '123:10:59' HOUR TO SECOND`|
+|MINUTE|`[+|-]'[+|-]m'`|`interval '1000' minute`|
+|MINUTE TO SECOND|`[+|-]'[+|-]m:s.n'`|`INTERVAL '1000:01.001' MINUTE TO SECOND`|
+|SECOND|`[+|-]'[+|-]s.n'`|`INTERVAL '1000.000001' SECOND`|
+
+#### ANSI Examples
+
+```sql
+SELECT INTERVAL '2-3' YEAR TO MONTH AS col;
++----------------------------+
+|col                         |
++----------------------------+
+|INTERVAL '2-3' YEAR TO MONTH|
++----------------------------+
+
+SELECT INTERVAL -'20 15:40:32.99899999' DAY TO SECOND AS col;
++--------------------------------------------+
+|col                                         |
++--------------------------------------------+
+|INTERVAL '-20 15:40:32.998999' DAY TO SECOND|
++--------------------------------------------+
+```
+
+#### Multi-units Syntax
 
 ```sql
 INTERVAL interval_value interval_unit [ interval_value interval_unit ... ] |
 INTERVAL 'interval_value interval_unit [ interval_value interval_unit ... ]' |
-INTERVAL interval_string_value interval_unit TO interval_unit
 ```
 
-#### Parameters
+#### Multi-units Parameters
 
 * **interval_value**
 
     **Syntax:**
 
       [ + | - ] number_value | '[ + | - ] number_value'
-
-* **interval_string_value**
-
-     year-month/day-time interval string.
 
 * **interval_unit**
 
@@ -464,7 +635,9 @@ INTERVAL interval_string_value interval_unit TO interval_unit
       YEAR[S] | MONTH[S] | WEEK[S] | DAY[S] | HOUR[S] | MINUTE[S] | SECOND[S] |
       MILLISECOND[S] | MICROSECOND[S]
 
-#### Examples
+      Mix of the YEAR[S] or MONTH[S] interval units with other units is not allowed.
+
+#### Multi-units Examples
 
 ```sql
 SELECT INTERVAL 3 YEAR AS col;
@@ -495,18 +668,4 @@ SELECT INTERVAL 1 YEARS 2 MONTH 3 WEEK 4 DAYS 5 HOUR 6 MINUTES 7 SECOND 8
 +-----------------------------------------------------------+
 |1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds|
 +-----------------------------------------------------------+
-
-SELECT INTERVAL '2-3' YEAR TO MONTH AS col;
-+----------------+
-|             col|
-+----------------+
-|2 years 3 months|
-+----------------+
-
-SELECT INTERVAL '20 15:40:32.99899999' DAY TO SECOND AS col;
-+---------------------------------------------+
-|                                          col|
-+---------------------------------------------+
-|20 days 15 hours 40 minutes 32.998999 seconds|
-+---------------------------------------------+
 ```

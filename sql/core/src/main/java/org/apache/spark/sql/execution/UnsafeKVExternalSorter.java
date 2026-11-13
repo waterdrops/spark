@@ -60,9 +60,10 @@ public final class UnsafeKVExternalSorter {
       BlockManager blockManager,
       SerializerManager serializerManager,
       long pageSizeBytes,
-      int numElementsForSpillThreshold) throws IOException {
+      int numElementsForSpillThreshold,
+      long sizeInBytesForSpillThreshold) throws IOException {
     this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes,
-      numElementsForSpillThreshold, null);
+      numElementsForSpillThreshold, sizeInBytesForSpillThreshold, null);
   }
 
   public UnsafeKVExternalSorter(
@@ -72,6 +73,7 @@ public final class UnsafeKVExternalSorter {
       SerializerManager serializerManager,
       long pageSizeBytes,
       int numElementsForSpillThreshold,
+      long sizeInBytesForSpillThreshold,
       @Nullable BytesToBytesMap map) throws IOException {
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;
@@ -98,6 +100,8 @@ public final class UnsafeKVExternalSorter {
         (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
+        sizeInBytesForSpillThreshold,
+        (int) SparkEnv.get().conf().get(package$.MODULE$.UNSAFE_SORTER_SPILL_MERGE_FACTOR()),
         canUseRadixSort);
     } else {
       // During spilling, the pointer array in `BytesToBytesMap` will not be used, so we can borrow
@@ -145,7 +149,7 @@ public final class UnsafeKVExternalSorter {
         // the KV-pair's length data is stored at 2 * uaoSize bytes immediately before that address
         MemoryBlock page = loc.getMemoryPage();
         long address = taskMemoryManager.encodePageNumberAndOffset(page,
-            baseOffset - 2 * UnsafeAlignedOffset.getUaoSize());
+            baseOffset - 2L * UnsafeAlignedOffset.getUaoSize());
 
         // Compute prefix
         row.pointTo(baseObject, baseOffset, loc.getKeyLength());
@@ -165,6 +169,8 @@ public final class UnsafeKVExternalSorter {
         (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
+        sizeInBytesForSpillThreshold,
+        (int) SparkEnv.get().conf().get(package$.MODULE$.UNSAFE_SORTER_SPILL_MERGE_FACTOR()),
         inMemSorter,
         map.getTotalMemoryConsumption());
 

@@ -19,12 +19,12 @@ package org.apache.spark.network.shuffle;
 
 import java.net.ConnectException;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Test suite for {@link ErrorHandler}
@@ -36,6 +36,8 @@ public class ErrorHandlerSuite {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
     assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
       ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
+    assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
+      ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")));
     assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
       ReturnCode.STALE_BLOCK_PUSH, "")));
     assertFalse(pushHandler.shouldRetryError(new RuntimeException(new ConnectException())));
@@ -53,6 +55,8 @@ public class ErrorHandlerSuite {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
     assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
       ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
+    assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
+      ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")));
     assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
       ReturnCode.STALE_BLOCK_PUSH, "")));
     assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
